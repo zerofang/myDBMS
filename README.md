@@ -1,12 +1,12 @@
 # myDBMS
 
-#for run :  
-flex sql.l  
-yacc -d sql.y  
-gcc sql.c lex.yy.c y.tab.c -o mysql  
-./mysql  
+# for run :  
+  flex sql.l  
+  yacc -d sql.y  
+  gcc sql.c lex.yy.c y.tab.c -o mysql  
+  ./mysql  
 
-#for test :  
+# for test :  
 
 //测试CREATE DATABASE SHOW DATABASES DROP DATABASE USE DATABASE  
 CREATE DATABASE XJGL;  
