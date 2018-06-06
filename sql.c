@@ -2,27 +2,22 @@
 
 extern char database[64];
 
-typedef struct field{
-    char name[64];
-    int type;			/*INT:0  STRING:1*/
-    union KEY key[100];
-}field;
-
-typedef struct table{
-    char name[64];
-    struct field *ffield;
-    int flen;
-    int ilen;
-    struct table *next;
-}table;
-
-typedef struct mydb{
-    char name[64];
-    struct table *tbroot;
-    struct mydb *next;
-}mydb;
-
 struct mydb *dbroot = NULL;
+
+struct item_def *converseItems(struct item_def *ppHead)  
+{  
+    struct item_def *pCurNode = ppHead; 
+    struct item_def *pPrevNode = NULL;  
+    struct item_def *pTmpNode = NULL;  
+    while(pCurNode)  
+    {  
+        pPrevNode = pCurNode; 
+        pCurNode = pCurNode->next;
+        pPrevNode->next = pTmpNode;
+        pTmpNode = pPrevNode;
+    } 
+    return pTmpNode;
+} 
 
 void createDB(){
 	if(dbroot == NULL){
@@ -171,7 +166,7 @@ void singleInsert(char *tableval, struct value_def *valroot){
 		}
 		dbtemp = dbtemp->next;
 	}
-	return;
+	printf("error: Database %s doesn't exist!\n", database);
 }
 
 void multiInsert(char *tableval, struct item_def *itemroot, struct value_def *valroot){
@@ -230,7 +225,7 @@ void multiInsert(char *tableval, struct item_def *itemroot, struct value_def *va
 		}
 		dbtemp = dbtemp->next;
 	}
-	return;
+	printf("error: Database %s doesn't exist!\n", database);
 }
 
 void selectAll(char *tableval){
@@ -248,12 +243,12 @@ void selectAll(char *tableval){
 			tabletemp = dbtemp->tbroot;
 			while(tabletemp != NULL){
 				if(strcmp(tabletemp->name, tableval) == 0){
-					for(i = 0; i < tabletemp->flen; i++){
+					for(i = tabletemp->flen-1; i >= 0; i--){
 						printf("%-20s  ", tabletemp->ffield[i].name);
 					}
 					printf("\n");
 					for(j = 0; j < tabletemp->ilen; j++){
-						for(i = 0; i < tabletemp->flen; i++){
+						for(i = tabletemp->flen-1; i >= 0; i--){
 							if(tabletemp->ffield[i].type == 0)
 								printf("%-20d  ", tabletemp->ffield[i].key[j].intkey);
 							else
@@ -270,5 +265,199 @@ void selectAll(char *tableval){
 		}
 		dbtemp = dbtemp->next;
 	}
-	return;	
+	printf("error: Database %s doesn not exist!\n", database);
+}
+
+void selectParts(struct item_def *itemroot, char *tableval){
+	struct mydb *dbtemp = NULL;
+	struct table *tabletemp = NULL;
+	struct item_def *itemtemp = NULL;
+	itemroot = converseItems(itemroot);
+	int i,j;
+	if(dbroot != NULL)
+		dbtemp = dbroot;
+	else{
+		printf("error: Please create a database first!\n");
+		return;
+	}
+	while(dbtemp != NULL){
+		if(strcmp(dbtemp->name,database) == 0){
+			tabletemp = dbtemp->tbroot;
+			while(tabletemp != NULL){
+				if(strcmp(tabletemp->name, tableval) == 0){
+					itemtemp = itemroot;
+					while(itemtemp != NULL){
+						for(i = 0; i < tabletemp->flen; i++){
+							if(strcmp(itemtemp->field, tabletemp->ffield[i].name) == 0){
+								itemtemp->pos = tabletemp->ffield[i];
+								break;
+							}
+						}
+						if(i == tabletemp->flen){
+							printf("error: Column name does not match the table definition!\n");
+							return;
+						}
+						itemtemp = itemtemp->next;
+					}
+					itemtemp = itemroot;
+					while(itemtemp != NULL){
+						printf("%-20s  ", itemtemp->field);
+						itemtemp = itemtemp->next;
+					}
+					printf("\n");
+					for(j = 0; j < tabletemp->ilen; j++){
+						itemtemp = itemroot;
+						while(itemtemp != NULL){
+							if(itemtemp->pos.type == 0)
+								printf("%-20d  ", itemtemp->pos.key[j].intkey);
+							else
+								printf("%-20s  ", itemtemp->pos.key[j].skey);
+							itemtemp = itemtemp->next;	
+						}
+						printf("\n");					
+					}
+					return;
+				}
+				tabletemp = tabletemp->next;
+			}
+			printf("error: The table doesn't exist!\n");
+			return;
+		}
+		dbtemp = dbtemp->next;
+	}
+	printf("error: Database %s doesn't exist!\n", database);	
+}
+
+_Bool whereTF(int i, int j, struct table_def *tableroot, struct conditions_def *conroot){
+	int k;
+	if(conroot->com_op == 7){
+		return whereTF(i, j, tableroot, conroot->left) && whereTF(i, j, tableroot, conroot->right);
+	}
+	else if(conroot->com_op == 7){
+		return whereTF(i, j, tableroot, conroot->left) || whereTF(i, j, tableroot, conroot->right);
+	}
+	else{
+		if(conroot->litem->pos == NULL){
+			struct table_def *tbtemp; 
+			tbtemp = tableroot;
+			while(tbtemp != NULL){
+				for(k = 0; k < tbtemp->pos->flen; k++){
+					if(strcmp(tbtemp->pos->ffield[k].name, conroot->litem->field) == 0){
+						conroot->litem->pos = tbtemp->pos->ffield[k];
+						break;
+					}
+				}
+				if(strcmp(tbtemp->pos->ffield[k].name, conroot->litem->field) == 0)
+					break;
+			}
+			if(conroot->litem->pos == NULL){
+				
+			}
+		}
+		if(conroot->type == 2 && conroot->ritem->pos == NULL){
+			for(k = 0; k < tableroot->next->pos->flen; k++){
+				if(strcmp(tableroot->pos->ffield[k].name, conroot->ritem->field) == 0){
+					conroot->litem->pos = tableroot->pos->ffield[k];
+				}
+			}			
+		}
+	}
+}
+
+void selectWhere(struct item_def *itemroot, struct table_def *tableroot, struct conditions_def *conroot){
+	struct mydb *dbtemp = NULL;
+	struct table_def *tableptr = NULL;
+	struct table *tabletemp = NULL;
+	struct item_def *itemtemp = NULL;
+	int i;
+	itemroot = converseItems(itemroot);
+	if(dbroot != NULL)
+		dbtemp = dbroot;
+	else{
+		printf("error: Please create a database first!\n");
+		return;
+	}
+	while(dbtemp != NULL){
+		if(strcmp(dbtemp->name,database) == 0){
+			tableptr = tableroot;
+			while(tableptr != NULL){
+				tabletemp = dbtemp->tbroot;
+				while(tabletemp != NULL){
+					if(strcmp(tabletemp->name, tableptr->table) == 0){
+						tableptr->pos = tabletemp;
+						break;
+					}
+					tabletemp = tabletemp->next;
+				}
+				if(tabletemp == NULL){
+					printf("error: 	Table %s doesn't exist!\n", tableptr->table);
+					return;
+				}
+				tableptr = tableptr->next;
+			}
+			itemtemp = itemroot;
+			while(itemtemp != NULL){
+				if(itemtemp->table  == NULL){
+					tableptr = tableroot;
+					while(tableptr != NULL){
+						for (int i = 0; i < tableptr->pos->flen; ++i){
+							if(strcmp(itemtemp->field, tableptr->pos->ffield[i].name) == 0){
+								itemtemp->pos = tableptr->pos->ffield[i];
+								break;
+							}
+						}
+						if(strcmp(itemtemp->field, tableptr->pos->ffield[i].name) == 0)
+							break;
+						tableptr = tableptr->next;
+					}
+					if(itemtemp->pos = NULL){
+						printf("error: 	Field %s doesn't exist!\n", itemtemp->field);
+						return;						
+					}
+				}
+				else{
+					tableptr = tableroot;
+					while(tableptr != NULL){
+						if(strcmp(tableptr->table, itemtemp->table) == 0){
+							for (int i = 0; i < tableptr->pos->flen; ++i){
+								if(strcmp(itemtemp->field, tableptr->pos->ffield[i].name) == 0){
+									itemtemp->pos = tableptr->pos->ffield[i];
+									break;
+								}
+							}
+							if(i == tableptr->pos->flen){
+								printf("error: 	Field %s doesn't exist!\n", itemtemp->field);
+								return;	
+							}
+							break;
+						}
+						tableptr = tableptr->next;
+					}					
+				}
+				itemtemp = itemtemp->next;
+			}
+			if(tableroot->next == NULL){
+
+			}
+			else{
+				tabletemp = (struct table *)malloc(sizeof(struct table));
+				strcpy(tabletemp->name, "newtable");
+				tabletemp->ffield = (struct field *)malloc(10*sizeof(struct field));
+				i = 0;
+				while(itemstemp != NULL && i<10){
+					strcpy(tabletemp->ffield[i].name, itemstemp->field);
+					if(strcmp(itemstemp->type,"INT") == 0)
+						tabletemp->ffield[i].type = 0;
+					else
+						tabletemp->ffield[i].type = 1;
+					itemstemp = itemstemp->next;
+					i++;
+				}
+				tabletemp->flen = i;
+				tabletemp->next = NULL;
+			}
+		}
+		dbtemp = dbtemp->next;
+	}
+	printf("error: Database %s doesn't exist!\n", database);
 }
