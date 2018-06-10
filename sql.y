@@ -18,8 +18,8 @@ int yywrap()
 // main function 
 int main() 
 {
+	printf("SQL>");
 	return	yyparse(); // calling parse funtion 
-	
 } 
 
 %}
@@ -33,19 +33,23 @@ int main()
   	struct item_def *itemval;
   	struct conditions_def *conval;
   	struct table_def *tbval;
+  	struct upcon_def *updateval;
 }
 
 %token SELECT FROM WHERE AND OR DROP DELETE TABLE CREATE INTO VALUES INSERT UPDATE SET SHOW DATABASE DATABASES TABLES EXIT USE
-%token <intval> NUMBER comparator ao
+%token <intval> NUMBER 
 %token <strval> STRING ID INT CHAR
+%type <intval> comparator ao
 %type <Citemsval> hyper_items create_items
 %type <createval> createsql
 %type <valueval> value_list value
 %type <itemval> item item_list
 %type <conval> condition conditions
 %type <tbval> tables
+%type <updateval> up_cond up_conds
 %left OR
 %left AND
+
 
 %%
 
@@ -55,74 +59,90 @@ statements: statements statement | statement
 statement: createsql | showsql | selectsql | insertsql | deletesql | updatesql | dropsql | exitsql | usesql
 
 usesql: 		USE ID ';' '\n' {
-					strcpy(database, $2);
-		          	printf("using database %s\n",$2);
+					useDB($2);
+					printf("SQL>");
 		        }
 
 showsql: 		SHOW DATABASES ';' '\n' {
-		            printf("show Databases \n");
+		            showDB();
+		            printf("SQL>");
 		        }
 		        |SHOW TABLES ';' '\n' {
-		            printf("show Tables \n");
+		            showTable();
+		            printf("SQL>");
 		        }
 
 createsql:		CREATE TABLE ID '(' hyper_items ')' ';' '\n' {
-					printf("creating table %s\n",$3);
 					$$ = ((struct create_def *)malloc(sizeof(struct create_def)));
                 	$$->table = $3;
                 	$$->Citems_def = $5;
                 	createTable($$);
+                	printf("SQL>");
 				}
 
 				|CREATE DATABASE ID ';' '\n' {
 					strcpy(database, $3);
-					printf("creating database \n"); 
 					createDB();
+					printf("SQL>");
 				}		        
 
-selectsql: 		SELECT '*' FROM ID ';' '\n' {
-					selectAll($4);
-					printf("all select with * \n");
+selectsql: 		SELECT '*' FROM tables ';' '\n'{
+					selectWhere(NULL, $4, NULL);
+					printf("SQL>");
 				}
-				| SELECT item_list FROM ID ';' '\n' {
-					selectParts($2, $4);
-					printf("Easy select with items \n"); 
-				}			
+				| SELECT item_list FROM tables ';' '\n' {
+					selectWhere($2, $4, NULL);
+					printf("SQL>");
+				}		
 				|SELECT '*' FROM tables WHERE conditions ';' '\n' {
 					selectWhere(NULL, $4, $6);
-					printf("conditional select with *  \n"); 
+					printf("SQL>");
 				}
-
 				|SELECT item_list FROM tables WHERE conditions ';' '\n' { 
 					selectWhere($2, $4, $6);
-					printf("Conditional select with items \n");
+					printf("SQL>");
 				}
 
 deletesql:		DELETE FROM ID ';' '\n' {
-					printf("Deleting complete rows.\n");
+					deletes($3, NULL);
+					printf("SQL>");
 				}
 
-				|DELETE FROM ID WHERE conditions ';' '\n' 	{ printf("Deleting data from particular table.\n"); }
+				|DELETE FROM ID WHERE conditions ';' '\n' 	{ 
+					deletes($3, $5);
+					printf("SQL>");
+				}
 
 
 insertsql:		INSERT INTO ID VALUES '(' value_list ')' ';' '\n' {
-					singleInsert($3, $6);
-					printf("INSERTing INTO TABLE\n"); 
+					multiInsert($3, NULL, $6);
+					printf("SQL>");
 				}
 		
 				|INSERT INTO ID '(' item_list ')' VALUES '(' value_list ')' ';' '\n' {
 					multiInsert($3, $5, $9);
-				 	printf("INSERTing INTO TABLE with items\n"); 
+					printf("SQL>");
 				}
 
 
-updatesql:		UPDATE ID SET up_cond ';' '\n' {
-					printf("updating without condition\n" );
+updatesql:		UPDATE ID SET up_conds ';' '\n' {
+					updates($2, $4, NULL);
+					printf("SQL>");
 				}
 		
-				|UPDATE ID SET up_cond WHERE conditions ';' '\n' { printf("updating with nested condition\n" );};
+				|UPDATE ID SET up_conds WHERE conditions ';' '\n' {
+					updates($2, $4, $6);
+					printf("SQL>");
+				}
 
-dropsql:		DROP TABLE ID ';' '\n'	{printf("Dropping table.\n");}
+dropsql:		DROP TABLE ID ';' '\n'	{
+					dropTable($3);
+					printf("SQL>");
+				}
+				| DROP DATABASE ID ';' '\n' {
+					dropDB($3);
+					printf("SQL>");
+				}
 
 exitsql: 		EXIT ';' {
 		            printf("exit with code 0!\n");
@@ -132,42 +152,29 @@ exitsql: 		EXIT ';' {
 create_items:	ID INT {
 					$$ = (struct hyper_items_def *)malloc(sizeof(struct hyper_items_def));
                     $$->field = $1;
-                    $$->type = $2;	
+                    $$->type = 0;	
                     $$->next = NULL;	
 				}
 				| ID CHAR '(' NUMBER ')'{
 					$$ = (struct hyper_items_def *)malloc(sizeof(struct hyper_items_def));
                     $$->field = $1;
-                    $$->type = $2;
+                    $$->type = 1;
                     $$->next = NULL;	
 				}
 
 hyper_items: 	create_items {
-					$$ = (struct hyper_items_def *)malloc(sizeof(struct hyper_items_def));
-                    $$->field = $1->field;
-                    $$->type = $1->type;
-                    $$->next = NULL;
+					$$ = $1;
 				}
 				| hyper_items ',' create_items {
-					$$ = (struct hyper_items_def *)malloc(sizeof(struct hyper_items_def));
-                    $$->field = $3->field;
-                    $$->type = $3->type;
-                    $$->next = $1;					
+					$$ = $3;
+					$$->next = $1;				
 				}
 
 item: 			ID {
 					$$ = (struct item_def *)malloc(sizeof(struct item_def));
-					$$->table = NULL;
 					$$->field = $1;
 					$$->pos = NULL;
 					$$->next = NULL;
-				}
-				|ID '.' ID{
-					$$ = (struct item_def *)malloc(sizeof(struct item_def));
-					$$->table = $1;
-					$$->field = $3;
-					$$->pos = NULL;
-					$$->next = NULL;					
 				}
 
 item_list: 		item {
@@ -199,15 +206,15 @@ value_list:		value {
 					$$->next = $1;
 				}
 
-comparator:		'=' {$$ = 1}
-				| '>' {$$ = 2}
-				| '<' {$$ = 3}
-				| ">=" {$$ = 4}
-				| "<=" {$$ = 5}
-				| '!' '=' {$$ = 6}
+comparator:		'=' {$$ = 1; }
+				| '>' {$$ = 2; }
+				| '<' {$$ = 3; }
+				| ">=" {$$ = 4; }
+				| "<=" {$$ = 5; }
+				| '!' '=' {$$ = 6; }
 
-ao: 			AND {$$ = 7}
-				| OR {$$ = 8}
+ao: 			AND {$$ = 7; }
+				| OR {$$ = 8; }
 
 condition: 		item comparator NUMBER {
 					$$ = ((struct conditions_def *)malloc(sizeof(struct conditions_def)));
@@ -223,15 +230,6 @@ condition: 		item comparator NUMBER {
 					$$->type = 1;
 					$$->litem = $1;
 					$$->strv = $3;
-					$$->cmp_op = $2;
-					$$->left = NULL;
-					$$->right = NULL;
-				}
-				| item comparator item {
-					$$ = ((struct conditions_def *)malloc(sizeof(struct conditions_def)));
-					$$->type = 2;
-					$$->litem = $1;
-					$$->ritem = $3;
 					$$->cmp_op = $2;
 					$$->left = NULL;
 					$$->right = NULL;
@@ -261,8 +259,27 @@ tables:			ID {
 					$$->next = $1;				
 				}
 
-up_cond:		ID '=' STRING new_up_cond | ID '=' NUMBER new_up_cond ;
+up_cond:		ID '=' NUMBER {
+					$$ = ((struct upcon_def *)malloc(sizeof(struct upcon_def)));
+					$$->field = $1;
+					$$->type = 0;
+					$$->value.intkey = $3;
+					$$->next = NULL;
+				}
+				| ID '=' STRING {
+					$$ = ((struct upcon_def *)malloc(sizeof(struct upcon_def)));
+					$$->field = $1;
+					$$->type = 1;
+					strcpy($$->value.skey, $3);
+					$$->next = NULL;				
+				}
 
-new_up_cond:	',' ID '=' STRING new_up_cond | ',' ID '=' NUMBER new_up_cond |/*e*/ ;
+up_conds:		up_cond {
+					$$ = $1;
+				}
+				| up_conds ',' up_cond {
+					$$ = $3;
+					$$->next = $1;
+				}
 
 %%
