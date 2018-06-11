@@ -7,6 +7,8 @@ extern char database[64];
 
 struct mydb *dbroot = NULL;
 
+
+/*item链表就地逆置*/
 struct item_def *converseItems(struct item_def *ppHead){
     struct item_def *pCurNode = ppHead;
     struct item_def *pPrevNode = NULL;
@@ -19,6 +21,16 @@ struct item_def *converseItems(struct item_def *ppHead){
         pTmpNode = pPrevNode;
     }
     return pTmpNode;
+}
+
+/*各种结构链表的内存释放*/
+void freeHItems(struct hyper_items_def *Hitemroot){
+	struct hyper_items_def *Hitemtemp;
+	while(Hitemroot != NULL){
+		Hitemtemp = Hitemroot->next;
+		free(Hitemroot);
+		Hitemroot = Hitemtemp;
+	}
 }
 
 void freeCons(struct conditions_def *conroot){
@@ -68,6 +80,8 @@ void freeVal(struct value_def *valroot){
 	}
 }
 
+/*创建数据库。若数据库根节点为空，则在根结点处创建数据库，若不为空则遍历数据库链表，
+若找到同名数据库，提示已存在，返回，若没找到，在链表尾部插入新的数据库*/
 void createDB(){
 	if(dbroot == NULL){
 		dbroot = (struct mydb *)malloc(sizeof(struct mydb));
@@ -99,12 +113,13 @@ void createDB(){
     	printf("Database %s created successfully!\n", database);
 }
 
+/*展示所有数据库。若根节点为空，提示数据库列表为空请先创建一个数据库，否则遍历数据库链表，打印数据库名*/
 void showDB(){
 	struct mydb *dbtemp = NULL;
 	if(dbroot != NULL)
 		dbtemp = dbroot;
 	else{
-		printf("error: Please create a database first!\n");
+		printf("Database list is NULL, Please create a database first!\n");
 		return;
 	}
 	while(dbtemp != NULL){
@@ -114,6 +129,8 @@ void showDB(){
 	printf("\n");	
 }
 
+/*指定使用的数据库，若数据库根节点为空，提示请先创建一个数据库，遍历数据库链表，找到对应数据库，
+将全局变量database更新为当前数据库名，否则提示数据库不存在，返回*/
 void useDB(char *dbname){
 	struct mydb *dbtemp = NULL;
 	if(dbroot != NULL)
@@ -133,26 +150,27 @@ void useDB(char *dbname){
 	printf("error: Database %s doesn't exist!\n", dbname);
 }
 
-void createTable(struct create_def *Croot){
+/*创建表。若数据库根节点为空，提示先创建数据库，否则遍历数据库列表，查找当前使用的数据库，若未找到，提示数据库不存在，
+若找到，再看当前数据库下的表根节点是否为空，若为空，在根节点处创建新表，否则遍历表链表，若找到名字相同的表，提示
+该表已存在，返回，否则在链表尾部建立新表*/
+void createTable(char *tableval, struct hyper_items_def *Hitemroot){
 	int i;
 	struct mydb *dbtemp = NULL;
 	struct table *newtable = NULL;
 	struct table *tabletemp = NULL;
-	struct hyper_items_def *itemstemp = Croot->Citems_def;
+	struct hyper_items_def *itemstemp = Hitemroot;
 	if(dbroot != NULL)
 		dbtemp = dbroot;
 	else{
 		printf("error: Please create a database first!\n");
-		if(Croot->Citems_def != NULL)
-			free(Croot->Citems_def);
-		free(Croot);
+		freeHItems(Hitemroot);
 		return;
 	}
 	while(dbtemp != NULL){
 		if(strcmp(dbtemp->name,database) == 0){
 			if(dbtemp->tbroot == NULL){
 				dbtemp->tbroot = (struct table *)malloc(sizeof(struct table));
-				strcpy(dbtemp->tbroot->name, Croot->table);
+				strcpy(dbtemp->tbroot->name, tableval);
 				dbtemp->tbroot->ffield = (struct field *)malloc(10*sizeof(struct field));
 				i = 0;
 				while(itemstemp != NULL && i<10){
@@ -168,32 +186,26 @@ void createTable(struct create_def *Croot){
 				dbtemp->tbroot->ilen = 0;
 				dbtemp->tbroot->next = NULL;
 				if(dbtemp->tbroot != NULL)
-					printf("Table %s created successfully!\n", Croot->table);
-				if(Croot->Citems_def != NULL)
-					free(Croot->Citems_def);
-				free(Croot);
+					printf("Table %s created successfully!\n", tableval);
+				freeHItems(Hitemroot);
 				return;
 			}
 			newtable = dbtemp->tbroot;
 			while(newtable->next != NULL){
-				if(strcmp(newtable->name,Croot->table) == 0){
+				if(strcmp(newtable->name,tableval) == 0){
 					printf("error: The table already exists!\n");
-					if(Croot->Citems_def != NULL)
-						free(Croot->Citems_def);
-					free(Croot);
+					freeHItems(Hitemroot);
 					return;
 				}
 				newtable = newtable->next;
 			}
-			if(strcmp(newtable->name,Croot->table) == 0){
+			if(strcmp(newtable->name,tableval) == 0){
 				printf("error: The table already exists!\n");
-				if(Croot->Citems_def != NULL)
-					free(Croot->Citems_def);
-				free(Croot);
+				freeHItems(Hitemroot);
 				return;
 			}
 			newtable->next = (struct table *)malloc(sizeof(struct table));
-			strcpy(newtable->next->name, Croot->table);
+			strcpy(newtable->next->name, tableval);
 			newtable->next->ffield = (struct field *)malloc(10*sizeof(struct field));
 			i = 0;
 			while(itemstemp != NULL && i<10){
@@ -207,20 +219,17 @@ void createTable(struct create_def *Croot){
 			}
 			newtable->next->flen = i;
 			newtable->next->next = NULL;
-			printf("Table %s created successfully!\n", Croot->table);
-			if(Croot->Citems_def != NULL)
-				free(Croot->Citems_def);
-			free(Croot);
+			printf("Table %s created successfully!\n", tableval);
+			freeHItems(Hitemroot);
 			return;
 		}
 		dbtemp = dbtemp->next;
 	}
-	if(Croot->Citems_def != NULL)
-		free(Croot->Citems_def);
-	free(Croot);
+	freeHItems(Hitemroot);
 	printf("error: Database %s doesn't exist!\n", database);
 }
 
+/*展示表。遍历当前选用的数据库下的表链表，打印表名*/
 void showTable(){
 	struct mydb *dbtemp = NULL;
 	struct table *tabletemp = NULL;
@@ -246,6 +255,9 @@ void showTable(){
 	printf("error: Database %s doesn't exist!\n", database);	
 }
 
+/*插入记录。找到插入的表，若未找到，提示不存在，找到以后，若未指定字段及其顺序，将value list中的值依次插入到每个字段的最后，
+若指定了字段和顺序，则按顺序查找字段，并依次追加记录，若未查找到对应字段，则提示字段与表不匹配，返回。完成插值以后，
+判断itemlist和valuelist是否同时为空，若不是，则提示两者不匹配，返回，若是，则提示成功，并将该表的条数值加一*/
 void multiInsert(char *tableval, struct item_def *itemroot, struct value_def *valroot){
 	struct mydb *dbtemp = NULL;
 	struct table *tabletemp = NULL;
@@ -335,6 +347,9 @@ void multiInsert(char *tableval, struct item_def *itemroot, struct value_def *va
 	printf("error: Database %s doesn't exist!\n", database);
 }
 
+/*二叉树递归判断条件正误，i是当前判断的一条记录在表中的位置索引，tabletemp是用于判断的临时表，单表查询时它指向单表，
+多表查询时它是多表的笛卡尔乘积，conroot是条件二叉树根节点，当conroot为空时直接判断为TRUE，这个主要用于无条件的查询和更新，
+删除等操作，有条件时，即最初传入的conroot不为空时，不会触发这条判断执行*/
 _Bool whereTF(int i, struct table *tabletemp, struct conditions_def *conroot){
 	if(conroot == NULL){
 		return TRUE;
@@ -407,6 +422,12 @@ _Bool whereTF(int i, struct table *tabletemp, struct conditions_def *conroot){
 	}
 }
 
+/*查询操作，目前仅支持最多2个表查询。itemroot是选择的字段链表根节点，若为*即全选则传入NULL，tableroot是选择的表根节点，
+conroot是条件二叉树根节点，若无条件则传入NULL，首先找到查询的表，找到以后更新每个table_def结构的pos变量，指向对应的表，
+然后判断是否是单表，若为单表，tabletemp指向该表，再判断itemroot是否为空，若为空表示全选，依次将整个表打印出来，
+提示成功，返回。若不为单表，即为2个表联合查询，那么先遍历两个表，找到第一组名称相同且数据类型相同的字段，作为主码，
+将字段值相同的记录进行合并，构成新表，存入tabletemp中，若没有字段相同的，将笛卡尔乘积存入tabletemp中，然后判断itemroot
+是否为空，若为空，判断并打印所有字段记录，若不为空，判断并打印对应的字段记录*/
 void selectWhere(struct item_def *itemroot, struct table_def *tableroot, struct conditions_def *conroot){
 	struct mydb *dbtemp = NULL;
 	struct table_def *tableptr = NULL;
@@ -634,6 +655,8 @@ void selectWhere(struct item_def *itemroot, struct table_def *tableroot, struct 
 	printf("error: Database %s doesn't exist!\n", database);
 }
 
+/*删除操作。tableval为做删除的表的名称，conroot为条件二叉树的根节点，若为NULL，表示删除全部记录，
+首先找到表，然后遍历表的每一条记录，若符合条件，则将后面的记录统一往前移动一条，将原纪录覆盖*/
 void deletes(char *tableval, struct conditions_def *conroot){
 	struct mydb *dbtemp = NULL;
 	struct table *tabletemp = NULL;
@@ -680,6 +703,9 @@ void deletes(char *tableval, struct conditions_def *conroot){
 	printf("error: Database %s doesn not exist!\n", database);	
 }
 
+/*更新操作。tableval是要更新的表名称，uproot为赋值结构链表，conroot为条件二叉树的根节点。
+先找到要更新的表，然后遍历赋值结构链表，找到对应的字段，并将其地址赋给每个赋值结构的pos变量，
+便于后续操作，然后遍历表的每一条记录，判断符合条件则将对应的字段更新为对应的值*/
 void updates(char *tableval, struct upcon_def *uproot, struct conditions_def *conroot){
 	struct mydb *dbtemp = NULL;
 	struct table *tabletemp = NULL;
@@ -750,6 +776,7 @@ void updates(char *tableval, struct upcon_def *uproot, struct conditions_def *co
 	printf("error: Database %s doesn not exist!\n", database);		
 }
 
+/*丢弃表，即链表的删除节点操作，删除时释放内存*/
 void dropTable(char *tableval){
 	struct mydb *dbtemp = NULL;
 	struct table *tabletemp = NULL;
@@ -799,6 +826,7 @@ void dropTable(char *tableval){
 	printf("error: Database %s doesn not exist!\n", database);		
 }
 
+/*丢弃数据库，即链表的删除节点操作，删除时释放内存*/
 void dropDB(char *dbname){
 	struct mydb *dbtemp = NULL;
 	struct mydb *dbtod = NULL;

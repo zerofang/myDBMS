@@ -27,8 +27,7 @@ int main()
 %union{  
 	int intval;   
   	char *strval;
-  	struct  hyper_items_def *Citemsval;
-  	struct create_def *createval;
+  	struct hyper_items_def *Citemsval;
   	struct value_def *valueval;
   	struct item_def *itemval;
   	struct conditions_def *conval;
@@ -39,9 +38,8 @@ int main()
 %token SELECT FROM WHERE AND OR DROP DELETE TABLE CREATE INTO VALUES INSERT UPDATE SET SHOW DATABASE DATABASES TABLES EXIT USE
 %token <intval> NUMBER 
 %token <strval> STRING ID INT CHAR
-%type <intval> comparator ao
+%type <intval> comparator
 %type <Citemsval> hyper_items create_items
-%type <createval> createsql
 %type <valueval> value_list value
 %type <itemval> item item_list
 %type <conval> condition conditions
@@ -59,92 +57,109 @@ statements: statements statement | statement
 statement: createsql | showsql | selectsql | insertsql | deletesql | updatesql | dropsql | exitsql | usesql
 
 usesql: 		USE ID ';' '\n' {
+					printf("\n");
 					useDB($2);
-					printf("SQL>");
+					printf("\nSQL>");
 		        }
 
 showsql: 		SHOW DATABASES ';' '\n' {
+					printf("\n");
 		            showDB();
-		            printf("SQL>");
+		            printf("\nSQL>");
 		        }
 		        |SHOW TABLES ';' '\n' {
+		        	printf("\n");
 		            showTable();
-		            printf("SQL>");
+		            printf("\nSQL>");
 		        }
 
 createsql:		CREATE TABLE ID '(' hyper_items ')' ';' '\n' {
-					$$ = ((struct create_def *)malloc(sizeof(struct create_def)));
-                	$$->table = $3;
-                	$$->Citems_def = $5;
-                	createTable($$);
-                	printf("SQL>");
+					printf("\n");
+                	createTable($3, $5);
+                	printf("\nSQL>");
 				}
 
 				|CREATE DATABASE ID ';' '\n' {
 					strcpy(database, $3);
+					printf("\n");
 					createDB();
-					printf("SQL>");
+					printf("\nSQL>");
 				}		        
 
 selectsql: 		SELECT '*' FROM tables ';' '\n'{
+					printf("\n");
 					selectWhere(NULL, $4, NULL);
+					printf("\n");
 					printf("SQL>");
 				}
 				| SELECT item_list FROM tables ';' '\n' {
+					printf("\n");
 					selectWhere($2, $4, NULL);
-					printf("SQL>");
+					printf("\nSQL>");
 				}		
 				|SELECT '*' FROM tables WHERE conditions ';' '\n' {
+					printf("\n");
 					selectWhere(NULL, $4, $6);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 				|SELECT item_list FROM tables WHERE conditions ';' '\n' { 
+					printf("\n");
 					selectWhere($2, $4, $6);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 
 deletesql:		DELETE FROM ID ';' '\n' {
+					printf("\n");
 					deletes($3, NULL);
+					printf("\n");
 					printf("SQL>");
 				}
 
 				|DELETE FROM ID WHERE conditions ';' '\n' 	{ 
+					printf("\n");
 					deletes($3, $5);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 
 
 insertsql:		INSERT INTO ID VALUES '(' value_list ')' ';' '\n' {
+					printf("\n");
 					multiInsert($3, NULL, $6);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 		
 				|INSERT INTO ID '(' item_list ')' VALUES '(' value_list ')' ';' '\n' {
+					printf("\n");
 					multiInsert($3, $5, $9);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 
 
 updatesql:		UPDATE ID SET up_conds ';' '\n' {
+					printf("\n");
 					updates($2, $4, NULL);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 		
 				|UPDATE ID SET up_conds WHERE conditions ';' '\n' {
+					printf("\n");
 					updates($2, $4, $6);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 
 dropsql:		DROP TABLE ID ';' '\n'	{
+					printf("\n");
 					dropTable($3);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 				| DROP DATABASE ID ';' '\n' {
+					printf("\n");
 					dropDB($3);
-					printf("SQL>");
+					printf("\nSQL>");
 				}
 
 exitsql: 		EXIT ';' {
+					printf("\n");
 		            printf("exit with code 0!\n");
 		            exit(0);
 		        }
@@ -213,9 +228,6 @@ comparator:		'=' {$$ = 1; }
 				| "<=" {$$ = 5; }
 				| '!' '=' {$$ = 6; }
 
-ao: 			AND {$$ = 7; }
-				| OR {$$ = 8; }
-
 condition: 		item comparator NUMBER {
 					$$ = ((struct conditions_def *)malloc(sizeof(struct conditions_def)));
 					$$->type = 0;
@@ -241,9 +253,15 @@ conditions: 	condition {
 				|'(' conditions ')' {
 					$$ = $2;
 				}
-				| conditions ao condition {
+				| conditions AND conditions {
 					$$ = ((struct conditions_def *)malloc(sizeof(struct conditions_def)));
-					$$->cmp_op = $2;
+					$$->cmp_op = 7;
+					$$->left = $1;
+					$$->right = $3;
+				}
+				| conditions OR conditions {
+					$$ = ((struct conditions_def *)malloc(sizeof(struct conditions_def)));
+					$$->cmp_op = 8;
 					$$->left = $1;
 					$$->right = $3;
 				}
